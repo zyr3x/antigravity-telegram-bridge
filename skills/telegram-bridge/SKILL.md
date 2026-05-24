@@ -165,9 +165,21 @@ The script maintains a `.telegram_offset` file in the project root to track the 
 
 ---
 
-## 5. CRON Setup (On-Demand)
+## 5. Commands
 
-> **Important:** Do NOT create the Telegram CRON automatically. Only set it up when the user **explicitly requests** it (e.g., "start telegram", "enable telegram chat", "подключи телеграм").
+> **Important:** Do NOT create the Telegram CRON automatically. Only act when the user **explicitly requests** it.
+
+### Setup Trigger
+
+When the user says "setup telegram" / "настрой телеграм" / "configure telegram":
+
+1. Check if `TG_BOT_TOKEN` and `TG_ADMIN_IDS` are already set in `.env`
+2. **If not configured** — run the setup wizard:
+   ```bash
+   python3 <SKILL_SCRIPTS_PATH>/tg_setup.py
+   ```
+   This will interactively ask for the bot token and admin IDs, verify them, and save to `.env`.
+3. **If already configured** — inform the user: "Telegram is already configured. Say 'start telegram' to enable."
 
 ### Activation Triggers
 
