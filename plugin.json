@@ -1,0 +1,19 @@
+{
+  "name": "antigravity-telegram-bridge",
+  "version": "1.0.0",
+  "description": "Universal Telegram chat interface for Antigravity agents. Enables two-way communication: receive user commands via Telegram and send notifications/replies back. Works with any project — just add your bot token.",
+  "author": {
+    "name": "zyr3x"
+  },
+  "license": "MIT",
+  "keywords": [
+    "telegram",
+    "chat",
+    "notifications",
+    "bridge",
+    "inbox",
+    "antigravity",
+    "agent",
+    "mcp"
+  ]
+}
