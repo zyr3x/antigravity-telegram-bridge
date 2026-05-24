@@ -107,26 +107,32 @@ python3 scripts/tg_inbox.py --mark-read  # Skip all pending messages
 
 ## 🤖 How It Works
 
+### Chat Commands
+
+| Command | What it does |
+|---------|-------------|
+| `setup telegram` | Runs setup wizard — asks for bot token & admin IDs, saves to `.env` |
+| `start telegram` | Creates CRON to check inbox every N minutes (polls for your messages) |
+| `stop telegram` | Stops the CRON — agent stops listening to Telegram |
+
+> Nothing starts automatically. You control when Telegram is active.
+
+### Flow
+
 ```
 ┌──────────────────────────────────────────────────────────┐
 │                  ONE-TIME SETUP                          │
 │                                                          │
 │  1. Copy plugin to ~/.gemini/config/plugins/             │
-│  2. Add TG_BOT_TOKEN + TG_ADMIN_IDS to project .env     │
+│  2. Tell the agent: "setup telegram"                     │
+│     → runs tg_setup.py → saves token to .env            │
 └────────────────────────┬─────────────────────────────────┘
                          │
                          ▼
 ┌──────────────────────────────────────────────────────────┐
-│              ANTIGRAVITY SESSION STARTS                   │
+│            YOU SAY: "start telegram"                     │
 │                                                          │
-│  Agent auto-detects the plugin → reads SKILL.md          │
-│  → now "knows" about Telegram and the scripts            │
-└────────────────────────┬─────────────────────────────────┘
-                         │
-                         ▼
-┌──────────────────────────────────────────────────────────┐
-│              AGENT CREATES CRON (once)                    │
-│                                                          │
+│  Agent creates a CRON:                                   │
 │  schedule(cron="*/5 * * * *", prompt="                   │
 │    1. Run tg_inbox.py                                    │
 │    2. If messages → process → reply via tg_send.py       │
@@ -153,9 +159,10 @@ python3 scripts/tg_inbox.py --mark-read  # Skip all pending messages
 │           ▼                                              │
 │     You receive the reply in Telegram ✅                 │
 └──────────────────────────────────────────────────────────┘
+
+         "stop telegram" → CRON killed → agent stops listening
 ```
 
-Nothing runs as a separate process — everything works through Antigravity's built-in CRON scheduler. The only manual step is copying the plugin and adding your bot token.
 
 ---
 
