@@ -4,6 +4,10 @@ Universal Telegram chat interface for [Antigravity](https://antigravity.google/)
 
 Drop this plugin into any project and instantly get a **two-way Telegram chat** to control your AI agent — send commands, receive notifications, get status updates.
 
+<p align="center">
+  <img src="assets/demo.png" alt="Antigravity Telegram Bridge Demo — Telegram chat + Antigravity UI" width="800">
+</p>
+
 ---
 
 ## ⚡ Quick Start (3 steps)
