@@ -165,9 +165,25 @@ The script maintains a `.telegram_offset` file in the project root to track the 
 
 ---
 
-## 5. CRON Setup (Mandatory)
+## 5. CRON Setup (On-Demand)
 
-At the start of the **FIRST session** (or whenever the CRON is not running), you **MUST** create a Telegram Inbox CRON using the `schedule` tool.
+> **Important:** Do NOT create the Telegram CRON automatically. Only set it up when the user **explicitly requests** it (e.g., "start telegram", "enable telegram chat", "подключи телеграм").
+
+### Activation Triggers
+
+The agent should create the Telegram Inbox CRON **only** when the user says something like:
+- "start telegram" / "enable telegram"
+- "подключи телеграм" / "запусти телеграм"
+- "I want to chat via Telegram"
+- Any clear request to enable Telegram communication
+
+### Deactivation Triggers
+
+The agent should **stop** the CRON when the user says:
+- "stop telegram" / "disable telegram"
+- "выключи телеграм" / "останови телеграм"
+
+To stop: use `manage_task` tool to kill the CRON task.
 
 ### Telegram Inbox CRON
 
@@ -197,10 +213,6 @@ Only respond to user messages. Do not start other workflows unless explicitly re
 ```
 
 > **Important:** Replace `<SKILL_SCRIPTS_PATH>` with the actual path to the scripts directory based on your installation (global plugin or project skill).
-
-### Verification
-
-At session start, verify the Telegram Inbox CRON is running. If missing — create it using the `schedule` tool BEFORE proceeding with any other work.
 
 ---
 
