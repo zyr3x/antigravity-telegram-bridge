@@ -1,6 +1,6 @@
 # 🔗 Antigravity Telegram Bridge
 
-Universal Telegram chat interface for [Antigravity](https://github.com/google-deepmind/antigravity) agents.
+Universal Telegram chat interface for [Antigravity](https://antigravity.google/) agents.
 
 Drop this plugin into any project and instantly get a **two-way Telegram chat** to control your AI agent — send commands, receive notifications, get status updates.
 
@@ -99,6 +99,7 @@ python3 scripts/tg_inbox.py --mark-read  # Skip all pending messages
 |----------|----------|-------------|
 | `TG_BOT_TOKEN` | ✅ | Telegram Bot API token from BotFather |
 | `TG_ADMIN_IDS` | ✅ | Comma-separated Telegram user IDs |
+| `TG_POLL_INTERVAL` | ❌ | Inbox check frequency in minutes (default: `5`). Set `1` for near real-time, `10` for relaxed |
 
 > **Backward compatibility:** Also supports `AGENT_TELEGRAM_BOT_TOKEN` and `TELEGRAM_ADMIN_IDS` as fallback names.
 
@@ -108,7 +109,7 @@ python3 scripts/tg_inbox.py --mark-read  # Skip all pending messages
 
 When the plugin is installed, Antigravity agents automatically:
 
-1. **Set up a CRON** to check the Telegram inbox every 5 minutes
+1. **Set up a CRON** to check the Telegram inbox (frequency controlled by `TG_POLL_INTERVAL`, default every 5 min)
 2. **Process incoming messages** using all available MCP tools
 3. **Reply** to each message via Telegram
 4. **Send notifications** for important events
@@ -120,7 +121,7 @@ The SKILL.md contains all instructions the agent needs — no additional configu
 ## 📋 Requirements
 
 - Python 3.8+
-- `requests` library (`pip install requests`)
+- Zero external dependencies (stdlib only)
 - Telegram Bot API token
 
 ---

@@ -18,10 +18,11 @@ description: >
 
 The Telegram bridge requires two environment variables in the project's `.env` file:
 
-| Variable | Description |
-|----------|-------------|
-| `TG_BOT_TOKEN` | Telegram Bot API token from [@BotFather](https://t.me/BotFather) |
-| `TG_ADMIN_IDS` | Comma-separated Telegram user IDs (only these users can interact) |
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `TG_BOT_TOKEN` | ✅ | Telegram Bot API token from [@BotFather](https://t.me/BotFather) |
+| `TG_ADMIN_IDS` | ✅ | Comma-separated Telegram user IDs (only these users can interact) |
+| `TG_POLL_INTERVAL` | ❌ | Inbox check frequency in minutes (default: `5`). Examples: `1`, `2`, `5`, `10` |
 
 > **Backward compatibility:** The scripts also accept `AGENT_TELEGRAM_BOT_TOKEN` and `TELEGRAM_ADMIN_IDS` as fallback variable names.
 
@@ -168,9 +169,20 @@ The script maintains a `.telegram_offset` file in the project root to track the 
 
 At the start of the **FIRST session** (or whenever the CRON is not running), you **MUST** create a Telegram Inbox CRON using the `schedule` tool.
 
-### Telegram Inbox CRON (every 5 minutes)
+### Telegram Inbox CRON
 
-**Schedule:** `*/5 * * * *`
+**Schedule:** Read `TG_POLL_INTERVAL` from `.env` to determine the frequency. Build the cron expression as `*/<interval> * * * *`.
+
+| `TG_POLL_INTERVAL` | CRON Expression | Checks per hour |
+|--------------------|-----------------|------------------|
+| `1` | `*/1 * * * *` | 60 (real-time) |
+| `2` | `*/2 * * * *` | 30 |
+| `5` (default) | `*/5 * * * *` | 12 |
+| `10` | `*/10 * * * *` | 6 |
+| `15` | `*/15 * * * *` | 4 |
+| `30` | `*/30 * * * *` | 2 |
+
+> **How to read `TG_POLL_INTERVAL`:** Run `python3 -c "import os; [exec(f'os.environ.setdefault(*l.strip().split(\"=\",1))') for l in open('.env') if '=' in l and not l.startswith('#')]; print(os.environ.get('TG_POLL_INTERVAL','5'))"` — this prints the configured interval or `5` if not set.
 
 **Prompt for `schedule` tool:**
 ```
