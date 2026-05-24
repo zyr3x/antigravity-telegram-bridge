@@ -105,16 +105,100 @@ python3 scripts/tg_inbox.py --mark-read  # Skip all pending messages
 
 ---
 
-## 🤖 How the Agent Uses It
+## 🤖 How It Works
 
-When the plugin is installed, Antigravity agents automatically:
+```
+┌──────────────────────────────────────────────────────────┐
+│                  ONE-TIME SETUP                          │
+│                                                          │
+│  1. Copy plugin to ~/.gemini/config/plugins/             │
+│  2. Add TG_BOT_TOKEN + TG_ADMIN_IDS to project .env     │
+└────────────────────────┬─────────────────────────────────┘
+                         │
+                         ▼
+┌──────────────────────────────────────────────────────────┐
+│              ANTIGRAVITY SESSION STARTS                   │
+│                                                          │
+│  Agent auto-detects the plugin → reads SKILL.md          │
+│  → now "knows" about Telegram and the scripts            │
+└────────────────────────┬─────────────────────────────────┘
+                         │
+                         ▼
+┌──────────────────────────────────────────────────────────┐
+│              AGENT CREATES CRON (once)                    │
+│                                                          │
+│  schedule(cron="*/5 * * * *", prompt="                   │
+│    1. Run tg_inbox.py                                    │
+│    2. If messages → process → reply via tg_send.py       │
+│    3. If empty → do nothing                              │
+│  ")                                                      │
+└────────────────────────┬─────────────────────────────────┘
+                         │
+                         ▼
+┌──────────────────────────────────────────────────────────┐
+│              LOOP (every N minutes, automatic)           │
+│                                                          │
+│  CRON wakes agent → agent runs tg_inbox.py              │
+│                                                          │
+│  ├─ No messages → [] → agent sleeps                     │
+│  │                                                       │
+│  └─ Message from you: "what's the weather?"             │
+│           │                                              │
+│           ▼                                              │
+│     Agent processes (MCP tools, search, analysis...)     │
+│           │                                              │
+│           ▼                                              │
+│     tg_send.py -m "☀️ 24°C, sunny, low wind"            │
+│           │                                              │
+│           ▼                                              │
+│     You receive the reply in Telegram ✅                 │
+└──────────────────────────────────────────────────────────┘
+```
 
-1. **Set up a CRON** to check the Telegram inbox (frequency controlled by `TG_POLL_INTERVAL`, default every 5 min)
-2. **Process incoming messages** using all available MCP tools
-3. **Reply** to each message via Telegram
-4. **Send notifications** for important events
+Nothing runs as a separate process — everything works through Antigravity's built-in CRON scheduler. The only manual step is copying the plugin and adding your bot token.
 
-The SKILL.md contains all instructions the agent needs — no additional configuration required.
+---
+
+## 💬 Conversation Examples
+
+### You message the bot → Agent replies
+
+```
+👤 You:  "hey, are you alive?"
+🤖 Bot:  "🔵 Yes! Session is active, everything is running smoothly."
+
+👤 You:  "what's the weather in Berlin?"
+🤖 Bot:  "🔵 Berlin: ☀️ 24°C, sunny, humidity 45%, wind 12 km/h"
+
+👤 You:  "summarize today's news"
+🤖 Bot:  "🔵 Top stories:
+          1. EU announces new AI regulation framework
+          2. SpaceX launches Starship test flight #7
+          3. Bitcoin ETF sees record inflows"
+
+👤 You:  "list all files in /tmp"
+🤖 Bot:  "🔵 Found 12 files in /tmp:
+          - report_2026.pdf (2.1 MB)
+          - debug.log (340 KB)
+          ..."
+
+👤 You:  "stop all tasks"
+🤖 Bot:  "🟡 ⚠️ All scheduled tasks paused. Send 'resume' to restart."
+```
+
+### Agent sends notifications proactively
+
+```
+🤖 Bot:  "🟢 Session started | Ready to assist"
+
+🤖 Bot:  "🔵 Task completed: database backup finished (2.3 GB)"
+
+🤖 Bot:  "🟡 ⚠️ Disk usage at 85% — consider cleanup"
+
+🤖 Bot:  "🔴 Build failed: 3 errors in main.py (see details)"
+
+🤖 Bot:  "😴 Session ended | Next check in 30 min"
+```
 
 ---
 
@@ -129,3 +213,4 @@ The SKILL.md contains all instructions the agent needs — no additional configu
 ## 📄 License
 
 MIT
+
