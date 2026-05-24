@@ -21,146 +21,46 @@ Usage:
 
 import os
 import sys
-import json
-import time
 import argparse
-import urllib.request
-import urllib.error
-import urllib.parse
+import tg_utils
 
 
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
 
-LEVEL_PREFIXES = {
-    "info": "🔵",
-    "warning": "🟡",
-    "critical": "🔴",
-}
-
-MAX_RETRIES = 3
-BACKOFF_BASE = 1  # seconds — retries at 1s, 2s, 4s
-
-
-# ---------------------------------------------------------------------------
-# .env resolution — CWD-first strategy
-# ---------------------------------------------------------------------------
-
-def _find_env_file(explicit_path=None):
-    """Find the .env file using a priority-based resolution strategy."""
-    if explicit_path:
-        if os.path.isfile(explicit_path):
-            return explicit_path
-        print(f"Warning: --env-file path not found: {explicit_path}", file=sys.stderr)
-        return None
-
-    cwd_env = os.path.join(os.getcwd(), ".env")
-    if os.path.isfile(cwd_env):
-        return cwd_env
-
-    current = os.getcwd()
-    while True:
-        parent = os.path.dirname(current)
-        if parent == current:
-            break
-        current = parent
-        candidate = os.path.join(current, ".env")
-        if os.path.isfile(candidate):
-            return candidate
-
-    return None
-
-
-def load_dotenv(explicit_path=None):
-    """Load key=value pairs from .env into os.environ (does NOT override existing)."""
-    env_path = _find_env_file(explicit_path)
-    if env_path is None:
-        return
-    with open(env_path, "r") as fh:
-        for line in fh:
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            if "=" not in line:
-                continue
-            key, val = line.split("=", 1)
-            key = key.strip()
-            val = val.strip().strip('"').strip("'")
-            if key and key not in os.environ:
-                os.environ[key] = val
-
-
-def get_token():
-    """Get bot token with fallback variable names."""
-    return os.environ.get("TG_BOT_TOKEN") or os.environ.get("AGENT_TELEGRAM_BOT_TOKEN")
-
-
-def get_admin_ids():
-    """Get admin IDs with fallback variable names. Returns a list of strings."""
-    raw = os.environ.get("TG_ADMIN_IDS") or os.environ.get("TELEGRAM_ADMIN_IDS")
-    if not raw:
-        return []
-    return [aid.strip() for aid in raw.split(",") if aid.strip()]
 
 
 # ---------------------------------------------------------------------------
 # Telegram helpers (stdlib only — zero dependencies)
 # ---------------------------------------------------------------------------
 
-def _post_json(url, payload):
-    """POST JSON to a URL. Returns (success, error_msg)."""
-    data = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(
-        url,
-        data=data,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    last_error = None
-
-    for attempt in range(MAX_RETRIES):
-        try:
-            with urllib.request.urlopen(req, timeout=15) as resp:
-                if resp.status == 200:
-                    return True, None
-                last_error = f"HTTP {resp.status}"
-        except urllib.error.HTTPError as e:
-            last_error = f"HTTP {e.code}: {e.read().decode('utf-8', errors='replace')}"
-            if e.code == 429:
-                # Rate-limited
-                try:
-                    body = json.loads(e.read().decode("utf-8"))
-                    retry_after = body.get("parameters", {}).get("retry_after", BACKOFF_BASE * (2 ** attempt))
-                except Exception:
-                    retry_after = BACKOFF_BASE * (2 ** attempt)
-                time.sleep(retry_after)
-                continue
-            if e.code >= 500:
-                time.sleep(BACKOFF_BASE * (2 ** attempt))
-                continue
-            return False, last_error
-        except urllib.error.URLError as e:
-            last_error = f"Connection error: {e.reason}"
-            time.sleep(BACKOFF_BASE * (2 ** attempt))
-        except Exception as e:
-            last_error = f"Unexpected error: {e}"
-            time.sleep(BACKOFF_BASE * (2 ** attempt))
-
-    return False, last_error
-
-
-def send_message(token, chat_id, text, silent=False):
-    """Send a text message via sendMessage (HTML parse mode)."""
+def send_message(token, chat_id, text, silent=False, thread_id=None, buttons=None, parse_mode="HTML"):
+    """Send a text message via sendMessage."""
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     payload = {
         "chat_id": chat_id,
         "text": text,
-        "parse_mode": "HTML",
     }
+    if parse_mode and parse_mode.lower() != "none":
+        payload["parse_mode"] = parse_mode
+
     if silent:
         payload["disable_notification"] = True
-    return _post_json(url, payload)
+    if thread_id:
+        payload["message_thread_id"] = thread_id
+        
+    if buttons:
+        inline_keyboard = []
+        for btn_group in buttons.split(";"):
+            row = []
+            for btn in btn_group.split(","):
+                if ":" in btn:
+                    text_btn, cb_data = btn.split(":", 1)
+                    row.append({"text": text_btn.strip(), "callback_data": cb_data.strip()})
+            if row:
+                inline_keyboard.append(row)
+        if inline_keyboard:
+            payload["reply_markup"] = {"inline_keyboard": inline_keyboard}
+
+    return tg_utils.post_json(url, payload)
 
 
 # ---------------------------------------------------------------------------
@@ -193,13 +93,28 @@ def main():
         default=None,
         help="Explicit path to .env file (overrides auto-detection).",
     )
+    parser.add_argument(
+        "--thread-id", "-t",
+        default=None,
+        help="Specific thread ID.",
+    )
+    parser.add_argument(
+        "--buttons", "-b",
+        default=None,
+        help="Inline buttons. Format: 'Text:cb_data,Text2:cb_data2;Row2Text:cb_data3'.",
+    )
+    parser.add_argument(
+        "--parse-mode",
+        default="HTML",
+        help="Parse mode (HTML, MarkdownV2, None). Default: HTML."
+    )
     args = parser.parse_args()
 
     # ---- Load configuration --------------------------------------------------
-    load_dotenv(args.env_file)
+    tg_utils.load_dotenv(args.env_file)
 
-    token = get_token()
-    admin_ids = get_admin_ids()
+    token = tg_utils.get_token()
+    admin_ids = tg_utils.get_admin_ids()
 
     if not token or not admin_ids:
         print("SKIP: Telegram not configured (TG_BOT_TOKEN or TG_ADMIN_IDS missing). Message not sent.")
@@ -212,7 +127,7 @@ def main():
     text = text.replace('\\n', '\n').replace('\\t', '\t')
 
     if args.level:
-        prefix = LEVEL_PREFIXES[args.level]
+        prefix = tg_utils.LEVEL_PREFIXES[args.level]
         if not text.lstrip().startswith(prefix):
             text = f"{prefix} {text}"
 
@@ -222,14 +137,20 @@ def main():
     # ---- Send to each admin --------------------------------------------------
     sent_count = 0
     fail_count = 0
+    
+    thread_id = args.thread_id or tg_utils.get_global_thread_id()
 
     for chat_id in admin_ids:
-        ok, err = send_message(token, chat_id, text, silent=silent)
+        ok, result = send_message(
+            token, chat_id, text, silent=silent, 
+            thread_id=thread_id, buttons=args.buttons, parse_mode=args.parse_mode
+        )
         if ok:
-            print(f"✓ Sent to {chat_id}")
+            msg_id = result.get("result", {}).get("message_id", "unknown")
+            print(f"✓ Sent to {chat_id} (message_id: {msg_id})")
             sent_count += 1
         else:
-            print(f"✗ Failed for {chat_id}: {err}")
+            print(f"✗ Failed for {chat_id}: {result}")
             fail_count += 1
 
     # ---- Exit code -----------------------------------------------------------

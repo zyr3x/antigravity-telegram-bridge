@@ -65,9 +65,13 @@ antigravity-telegram-bridge/
     └── telegram-bridge/
         ├── SKILL.md               # Agent instructions (auto-loaded)
         └── scripts/
-            ├── tg_inbox.py        # Receive messages (getUpdates + offset)
-            ├── tg_send.py         # Send text messages
-            ├── tg_send_photo.py   # Send photos with captions
+            ├── tg_utils.py        # Shared utilities (config, retries)
+            ├── tg_inbox.py        # Receive messages, files & button clicks
+            ├── tg_send.py         # Send text (supports inline buttons)
+            ├── tg_send_photo.py   # Send photos
+            ├── tg_send_document.py # Send files/documents
+            ├── tg_send_action.py  # Chat actions (typing...)
+            ├── tg_edit_message.py # Edit existing messages
             └── tg_setup.py        # Interactive setup wizard
 ```
 
@@ -79,12 +83,25 @@ antigravity-telegram-bridge/
 ```bash
 python3 scripts/tg_send.py -m "Hello from Antigravity!"
 python3 scripts/tg_send.py -m "⚠️ Alert!" --level warning
-python3 scripts/tg_send.py -m "🔴 Critical issue" --level critical
+python3 scripts/tg_send.py -m "Deploy?" --buttons "Yes:yes,No:no"
+python3 scripts/tg_send.py -m "Log entry" --thread-id 123
+python3 scripts/tg_send.py -m "if x < 5: print(x)" --parse-mode None
 ```
 
-### Send a photo
+### Send media and files
 ```bash
 python3 scripts/tg_send_photo.py --photo /path/to/image.png --caption "Screenshot"
+python3 scripts/tg_send_document.py --document /path/to/report.pdf --caption "Report"
+```
+
+### Edit messages (Progress bars)
+```bash
+python3 scripts/tg_edit_message.py -i <message_id> -c <chat_id> -t "Processing... 50%"
+```
+
+### Chat Actions
+```bash
+python3 scripts/tg_send_action.py -a typing
 ```
 
 ### Check inbox
@@ -92,7 +109,10 @@ python3 scripts/tg_send_photo.py --photo /path/to/image.png --caption "Screensho
 python3 scripts/tg_inbox.py              # Fetch new messages (advances offset)
 python3 scripts/tg_inbox.py --peek       # Fetch without marking as read
 python3 scripts/tg_inbox.py --mark-read  # Skip all pending messages
+python3 scripts/tg_inbox.py --uploads-dir /custom/path  # Custom uploads dir
 ```
+
+When a user sends a photo, document, or voice message, files are automatically downloaded to `.telegram_uploads/` in the project root (configurable via `TG_UPLOADS_DIR` in `.env`).
 
 ### Message levels
 
@@ -110,6 +130,8 @@ python3 scripts/tg_inbox.py --mark-read  # Skip all pending messages
 |----------|----------|-------------|
 | `TG_BOT_TOKEN` | ✅ | Telegram Bot API token from BotFather |
 | `TG_ADMIN_IDS` | ✅ | Comma-separated Telegram user IDs |
+| `TG_THREAD_ID` | ❌ | Topic ID for Telegram groups with forums |
+| `TG_UPLOADS_DIR` | ❌ | Directory for downloaded files. Default: `<project_root>/.telegram_uploads/` |
 | `TG_POLL_INTERVAL` | ❌ | Inbox check frequency in minutes (default: `5`). Set `1` for near real-time, `10` for relaxed |
 
 > **Backward compatibility:** Also supports `AGENT_TELEGRAM_BOT_TOKEN` and `TELEGRAM_ADMIN_IDS` as fallback names.

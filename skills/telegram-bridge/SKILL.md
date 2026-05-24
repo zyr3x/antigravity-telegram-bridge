@@ -39,6 +39,8 @@ The Telegram bridge requires environment variables in the project's `.env` file:
 |----------|----------|-------------|
 | `TG_BOT_TOKEN` | ✅ | Telegram Bot API token from [@BotFather](https://t.me/BotFather) |
 | `TG_ADMIN_IDS` | ✅ | Comma-separated Telegram user IDs (only these users can interact) |
+| `TG_THREAD_ID` | ❌ | Topic ID for Forum groups. If set, notifications will route here by default |
+| `TG_UPLOADS_DIR` | ❌ | Directory for downloaded files (photos, docs). Default: `<project_root>/.telegram_uploads/` |
 | `TG_POLL_INTERVAL` | ❌ | Inbox check frequency in minutes (default: `5`). Examples: `1`, `2`, `5`, `10` |
 
 > **Backward compatibility:** Also accepts `AGENT_TELEGRAM_BOT_TOKEN` and `TELEGRAM_ADMIN_IDS`.
@@ -142,12 +144,50 @@ python3 <scripts_path>/tg_send.py -m "🔴 Critical error" --level critical
 
 # Silent mode
 python3 <scripts_path>/tg_send.py -m "Background update" --silent
+
+# With inline buttons (returns message_id which can be edited later)
+python3 <scripts_path>/tg_send.py -m "Deploy?" --buttons "Yes:cb_yes,No:cb_no"
+
+# With specific thread ID (Topic)
+python3 <scripts_path>/tg_send.py -m "Log entry" --thread-id 123
+
+# Disable HTML parsing (for raw text with < > & symbols)
+python3 <scripts_path>/tg_send.py -m "if x < 5: print(x)" --parse-mode None
+```
+
+> **Extracting message_id:** `tg_send.py` prints `message_id` in stdout like:
+> `✓ Sent to 123456 (message_id: 789)`
+> Parse this to use with `tg_edit_message.py`.
+
+### Documents & Files
+
+```bash
+python3 <scripts_path>/tg_send_document.py -d /path/to/report.pdf -c "Monthly Report"
+python3 <scripts_path>/tg_send_document.py -d /tmp/logs.txt --parse-mode None
+```
+
+### Editing Messages
+
+```bash
+# Useful for progress bars
+python3 <scripts_path>/tg_edit_message.py -i 12345 -c 987654 -t "Processing... 50%"
+
+# With raw text (no HTML parsing)
+python3 <scripts_path>/tg_edit_message.py -i 12345 -c 987654 -t "x < 5" --parse-mode None
+```
+
+### Chat Actions (Typing status)
+
+```bash
+python3 <scripts_path>/tg_send_action.py -a typing
+python3 <scripts_path>/tg_send_action.py -a upload_document
 ```
 
 ### Photos
 
 ```bash
 python3 <scripts_path>/tg_send_photo.py --photo /path/to/image.png --caption "Description"
+python3 <scripts_path>/tg_send_photo.py --photo /path/to/chart.png --caption "Chart" --parse-mode None
 ```
 
 ### Message Levels
@@ -164,7 +204,9 @@ python3 <scripts_path>/tg_send_photo.py --photo /path/to/image.png --caption "De
 |------|--------|
 | **NEVER use `$` in message text** | Shell interprets `$` + digits as a variable. Use plain text instead |
 | **Newlines** | Use `\\n` in the message string for line breaks |
-| **HTML formatting** | Use `<b>bold</b>`, `<i>italic</i>`, `<code>code</code>` |
+| **HTML formatting** | Use `<b>bold</b>`, `<i>italic</i>`, `<code>code</code>`. Enabled by default. |
+| **Raw text / Code** | **CRITICAL:** If sending code snippets or text with `<`, `>`, `&` symbols, you MUST add `--parse-mode None`. Otherwise Telegram API will crash with `400 Bad Request: can't parse entities` |
+| **Message Limits** | Text messages: Max **4096** chars. Captions: Max **1024** chars. If a message is too long, either split it into chunks or save it as a file and send it via `tg_send_document.py` |
 
 ---
 
@@ -179,7 +221,16 @@ python3 <scripts_path>/tg_inbox.py --peek
 
 # Skip all pending messages
 python3 <scripts_path>/tg_inbox.py --mark-read
+
+# Custom uploads directory for file attachments
+python3 <scripts_path>/tg_inbox.py --uploads-dir /path/to/uploads
 ```
+
+### File Downloads
+
+When the user sends a photo, document, voice message, video, or audio file, the inbox automatically downloads it to `<project_root>/.telegram_uploads/`. The JSON output includes `file_path` and `file_type` fields.
+
+Supported file types: `photo`, `document`, `voice`, `audio`, `video`, `video_note`, `sticker`.
 
 ### Output Format
 
@@ -192,7 +243,31 @@ JSON array to stdout:
     "from_name": "User",
     "chat_id": 123456789,
     "date": 1716483600,
-    "text": "What is the current status?"
+    "text": "What is the current status?",
+    "type": "message",
+    "thread_id": 123
+  },
+  {
+    "update_id": 123457,
+    "from_id": "123456789",
+    "from_name": "User",
+    "chat_id": 123456789,
+    "date": 1716483610,
+    "text": "Check this screenshot",
+    "type": "message",
+    "file_path": "/path/to/project/.telegram_uploads/photo_AbCdEf123456.jpg",
+    "file_type": "photo"
+  },
+  {
+    "update_id": 123458,
+    "from_id": "123456789",
+    "from_name": "User",
+    "chat_id": 123456789,
+    "date": 1716483620,
+    "text": "cb_yes",
+    "type": "callback_query",
+    "callback_id": "9876543210",
+    "thread_id": 123
   }
 ]
 ```

@@ -88,8 +88,8 @@ def write_env_file(path, lines):
             f.write(line + "\n")
 
 
-def update_env(path, token, admin_ids):
-    """Add or update TG_BOT_TOKEN and TG_ADMIN_IDS in .env."""
+def update_env(path, token, admin_ids, uploads_dir=None):
+    """Add or update TG_BOT_TOKEN, TG_ADMIN_IDS, TG_UPLOADS_DIR in .env."""
     lines, keys = read_env_file(path)
 
     # Update or add TG_BOT_TOKEN
@@ -108,6 +108,14 @@ def update_env(path, token, admin_ids):
         lines = [admin_line if l.strip().startswith("TG_ADMIN_IDS=") else l for l in lines]
     else:
         lines.append(admin_line)
+
+    # Update or add TG_UPLOADS_DIR (if provided)
+    if uploads_dir:
+        uploads_line = f"TG_UPLOADS_DIR={uploads_dir}"
+        if "TG_UPLOADS_DIR" in keys:
+            lines = [uploads_line if l.strip().startswith("TG_UPLOADS_DIR=") else l for l in lines]
+        else:
+            lines.append(uploads_line)
 
     write_env_file(path, lines)
 
@@ -198,15 +206,30 @@ def main():
             print(f"  ✗ Invalid admin ID: '{aid}' — must be a number.")
             sys.exit(1)
 
+    # ---- Uploads directory ----------------------------------------------------
+    uploads_dir = None
+    if not args.admin_ids:  # interactive mode
+        print()
+        print("Step 3: Uploads Directory (optional)")
+        print("  Where should downloaded files (photos, docs) be saved?")
+        print("  Press Enter for default: <project_root>/.telegram_uploads/")
+        print()
+        try:
+            uploads_input = input("  Uploads dir: ").strip()
+            if uploads_input:
+                uploads_dir = uploads_input
+        except (EOFError, KeyboardInterrupt):
+            pass
+
     # ---- Write .env ----------------------------------------------------------
     print()
     print(f"  Writing to {env_path}...", end=" ")
-    update_env(env_path, token, ",".join(admin_ids))
+    update_env(env_path, token, ",".join(admin_ids), uploads_dir=uploads_dir)
     print("✓")
 
     # ---- Send test message ---------------------------------------------------
     print()
-    print("Step 3: Sending test message...")
+    print("Step 4: Sending test message...")
     all_ok = True
     for aid in admin_ids:
         print(f"  → Sending to {aid}...", end=" ")
@@ -227,6 +250,8 @@ def main():
     print(f"  Config saved to: {env_path}")
     print(f"  Bot: @{bot_username}")
     print(f"  Admins: {', '.join(admin_ids)}")
+    if uploads_dir:
+        print(f"  Uploads: {uploads_dir}")
     print()
     print("Next steps:")
     print("  1. Install the plugin:")
