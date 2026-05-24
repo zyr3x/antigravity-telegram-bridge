@@ -17,12 +17,19 @@ Drop this plugin into any project and instantly get a **two-way Telegram chat** 
 
 ### 2. Install the Plugin
 
-**Option A — Global Plugin (all projects):**
+**Option A — Symlink (recommended, stays in sync with git):**
+```bash
+git clone https://github.com/zyr3x/antigravity-telegram-bridge.git ~/Development/antigravity-telegram-bridge
+ln -sf ~/Development/antigravity-telegram-bridge ~/.gemini/config/plugins/antigravity-telegram-bridge
+```
+> Updates are instant — just `git pull` inside the clone.
+
+**Option B — Copy (all projects):**
 ```bash
 cp -r antigravity-telegram-bridge ~/.gemini/config/plugins/
 ```
 
-**Option B — Project Skill (single project):**
+**Option C — Project Skill (single project):**
 ```bash
 cp -r antigravity-telegram-bridge/skills/telegram-bridge your-project/.agents/skills/
 ```

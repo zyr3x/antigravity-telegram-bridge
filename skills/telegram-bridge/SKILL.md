@@ -3,20 +3,37 @@ name: telegram-bridge
 description: >
   Universal Telegram chat interface for Antigravity agents. Enables two-way
   communication: receive user commands via Telegram and send replies/notifications.
-  Activate for ANY task involving Telegram messaging, inbox checking, or
-  notification sending. Works with any project — domain-agnostic.
+  Activate when the user asks to setup, start, or stop Telegram.
+  Works with any project — domain-agnostic.
 ---
 
 # Telegram Bridge — Agent Instructions
 
 > This skill gives you the ability to communicate with the user through Telegram.
 > You can receive commands, answer questions, and send notifications — all via Telegram chat.
+> **Do NOT activate automatically.** Only act when the user explicitly requests it.
 
 ---
 
-## 1. Configuration
+## 1. Resolving Script Paths
 
-The Telegram bridge requires two environment variables in the project's `.env` file:
+Before using any script, you must determine the correct path. Check in this order:
+
+1. **Project skill**: `.agents/skills/telegram-bridge/scripts/`
+2. **Global plugin**: `~/.gemini/config/plugins/antigravity-telegram-bridge/skills/telegram-bridge/scripts/`
+
+Test with:
+```bash
+ls .agents/skills/telegram-bridge/scripts/tg_send.py 2>/dev/null || ls ~/.gemini/config/plugins/antigravity-telegram-bridge/skills/telegram-bridge/scripts/tg_send.py
+```
+
+Store the resolved path and reuse it for all commands in the session.
+
+---
+
+## 2. Configuration
+
+The Telegram bridge requires environment variables in the project's `.env` file:
 
 | Variable | Required | Description |
 |----------|----------|-------------|
@@ -24,123 +41,149 @@ The Telegram bridge requires two environment variables in the project's `.env` f
 | `TG_ADMIN_IDS` | ✅ | Comma-separated Telegram user IDs (only these users can interact) |
 | `TG_POLL_INTERVAL` | ❌ | Inbox check frequency in minutes (default: `5`). Examples: `1`, `2`, `5`, `10` |
 
-> **Backward compatibility:** The scripts also accept `AGENT_TELEGRAM_BOT_TOKEN` and `TELEGRAM_ADMIN_IDS` as fallback variable names.
+> **Backward compatibility:** Also accepts `AGENT_TELEGRAM_BOT_TOKEN` and `TELEGRAM_ADMIN_IDS`.
 
-> **Availability check:** If neither `TG_BOT_TOKEN` nor `AGENT_TELEGRAM_BOT_TOKEN` is set, **skip ALL Telegram operations silently**. The scripts handle this gracefully (exit code 0, empty output). Telegram is never a blocking dependency.
+> **Availability check:** If no token is set, **skip ALL Telegram operations silently**. Scripts exit with code 0 and empty output. Telegram is never a blocking dependency.
 
 ### How `.env` is Resolved
 
-The scripts look for `.env` in this order:
+Scripts look for `.env` in this order:
 1. Variables already in `os.environ` (highest priority)
 2. `--env-file PATH` flag (explicit override)
 3. `.env` in the **current working directory** (CWD = project root)
 4. Walk upward from CWD until `.env` is found (fallback)
 
-> **Important:** When running scripts, always run from the **project root** so that `.env` is found correctly.
+> **Important:** Always run scripts from the **project root** directory.
 
 ---
 
-## 2. Sending Messages
+## 3. Commands (On-Demand Only)
 
-Use the notifier script to send text messages to all admin users.
+> **Critical:** Do NOT create the Telegram CRON automatically. Only act when the user **explicitly requests** it.
 
-### Script Location
+### `setup telegram`
 
-```
-skills/telegram-bridge/scripts/tg_send.py
-```
+**Triggers:** "setup telegram", "настрой телеграм", "configure telegram"
 
-> **Path note:** When installed as a global plugin, the full path is:
-> `~/.gemini/config/plugins/antigravity-telegram-bridge/skills/telegram-bridge/scripts/tg_send.py`
-> When installed as a project skill:
-> `.agents/skills/telegram-bridge/scripts/tg_send.py`
-> Use whichever path matches your installation.
+**Action:**
+1. Check if `TG_BOT_TOKEN` and `TG_ADMIN_IDS` exist in `.env`
+2. **If not configured** — run the setup wizard:
+   ```bash
+   python3 <scripts_path>/tg_setup.py
+   ```
+   This interactively asks for the bot token and admin IDs, verifies via API, sends a test message, and saves to `.env`.
+3. **If already configured** — reply: "✅ Telegram is already configured. Say 'start telegram' to enable inbox polling."
 
-### Usage
+### `start telegram`
+
+**Triggers:** "start telegram", "enable telegram", "запусти телеграм", "подключи телеграм"
+
+**Action:**
+1. Verify Telegram is configured (token + admin IDs in `.env`). If not — prompt to run setup first.
+2. Read `TG_POLL_INTERVAL` from `.env` (default: `5`).
+3. Create a CRON using the `schedule` tool:
+
+   **Schedule:** `*/<interval> * * * *` (e.g., `*/5 * * * *` for every 5 minutes)
+
+   **Prompt:**
+   ```
+   Check Telegram inbox for new user messages. Execute:
+   1. Run: python3 <scripts_path>/tg_inbox.py
+   2. If messages returned (non-empty JSON array):
+      - Process each message — interpret the request
+      - Use any available MCP tools to fulfill the request
+      - Reply via: python3 <scripts_path>/tg_send.py -m "REPLY_TEXT" --level info
+   3. If no messages (empty array []): do nothing, end turn.
+   Only respond to user messages. Do not start other workflows unless explicitly requested.
+   ```
+
+4. Send a confirmation message to Telegram:
+   ```bash
+   python3 <scripts_path>/tg_send.py -m "🟢 Telegram bridge activated. Checking inbox every <interval> min." --level info
+   ```
+
+5. Reply to the user in chat: "✅ Telegram bridge started. Checking inbox every N minutes."
+
+### `stop telegram`
+
+**Triggers:** "stop telegram", "disable telegram", "выключи телеграм", "останови телеграм"
+
+**Action:**
+1. Use `manage_task` tool to find and kill the Telegram Inbox CRON task.
+2. Send a final message to Telegram:
+   ```bash
+   python3 <scripts_path>/tg_send.py -m "🔴 Telegram bridge deactivated." --level warning
+   ```
+3. Reply to the user in chat: "✅ Telegram bridge stopped."
+
+### `status telegram`
+
+**Triggers:** "status telegram", "статус телеграм", "is telegram running?"
+
+**Action:**
+1. Check if a Telegram Inbox CRON task is active (use `manage_task` list).
+2. Reply with status: running/stopped, poll interval, last check time.
+
+---
+
+## 4. Sending Messages
+
+### Text Messages
 
 ```bash
-# Standard info notification (sent silently, no push sound)
-python3 <path>/scripts/tg_send.py -m "✅ Task completed successfully" --level info
+# Info (silent delivery)
+python3 <scripts_path>/tg_send.py -m "✅ Task completed" --level info
 
-# Warning notification
-python3 <path>/scripts/tg_send.py -m "⚠️ Something needs attention" --level warning
+# Warning
+python3 <scripts_path>/tg_send.py -m "⚠️ Something needs attention" --level warning
 
-# Critical alert (sent with sound)
-python3 <path>/scripts/tg_send.py -m "🔴 Critical error occurred" --level critical
+# Critical (with notification sound)
+python3 <scripts_path>/tg_send.py -m "🔴 Critical error" --level critical
 
-# Silent mode (no notification sound regardless of level)
-python3 <path>/scripts/tg_send.py -m "Background update" --silent
+# Silent mode
+python3 <scripts_path>/tg_send.py -m "Background update" --silent
 ```
 
-### Urgency Levels
+### Photos
+
+```bash
+python3 <scripts_path>/tg_send_photo.py --photo /path/to/image.png --caption "Description"
+```
+
+### Message Levels
 
 | Level | Emoji | Behavior |
 |-------|-------|----------|
-| `info` (default) | 🔵 | Routine updates, sent silently (no push notification sound) |
+| `info` (default) | 🔵 | Routine updates, sent silently |
 | `warning` | 🟡 | Attention needed, standard delivery |
-| `critical` | 🔴 | Immediate attention required, sent with notification sound |
+| `critical` | 🔴 | Immediate attention, sent with sound |
 
 ### Rules
 
 | Rule | Detail |
 |------|--------|
-| **NEVER use `$` in message text** | The shell interprets `$` + digits as a variable. Use plain numbers instead (e.g., `379.30 USDT` not `$379.30`) |
+| **NEVER use `$` in message text** | Shell interprets `$` + digits as a variable. Use plain text instead |
 | **Newlines** | Use `\\n` in the message string for line breaks |
-| **HTML formatting** | Messages use HTML parse mode. You can use `<b>bold</b>`, `<i>italic</i>`, `<code>code</code>` |
+| **HTML formatting** | Use `<b>bold</b>`, `<i>italic</i>`, `<code>code</code>` |
 
 ---
 
-## 3. Sending Photos
-
-Use the photo script to send images with captions.
-
-### Script Location
-
-```
-skills/telegram-bridge/scripts/tg_send_photo.py
-```
-
-### Usage
-
-```bash
-# Photo with caption
-python3 <path>/scripts/tg_send_photo.py --photo /path/to/image.png --caption "📊 Analysis result"
-
-# Photo with level prefix
-python3 <path>/scripts/tg_send_photo.py --photo /path/to/chart.png --caption "Chart analysis" --level info
-
-# Silent photo
-python3 <path>/scripts/tg_send_photo.py --photo /path/to/screenshot.png --caption "Update" --silent
-```
-
----
-
-## 4. Receiving Messages (Inbox)
-
-The inbox script fetches unread messages sent by admin users to the bot.
-
-### Script Location
-
-```
-skills/telegram-bridge/scripts/tg_inbox.py
-```
-
-### Usage
+## 5. Receiving Messages (Inbox)
 
 ```bash
 # Fetch new messages (advances offset — each message seen only once)
-python3 <path>/scripts/tg_inbox.py
+python3 <scripts_path>/tg_inbox.py
 
-# Peek without marking as read (re-readable)
-python3 <path>/scripts/tg_inbox.py --peek
+# Peek without marking as read
+python3 <scripts_path>/tg_inbox.py --peek
 
-# Skip all pending messages (advance offset, no output)
-python3 <path>/scripts/tg_inbox.py --mark-read
+# Skip all pending messages
+python3 <scripts_path>/tg_inbox.py --mark-read
 ```
 
 ### Output Format
 
-JSON array printed to stdout:
+JSON array to stdout:
 ```json
 [
   {
@@ -154,77 +197,14 @@ JSON array printed to stdout:
 ]
 ```
 
-Empty array `[]` means no new messages.
+Empty array `[]` = no new messages.
 
 ### Offset Tracking
 
-The script maintains a `.telegram_offset` file in the project root to track the last processed message. This ensures:
-- Each message is seen **exactly once**
-- No duplicates across multiple runs
-- `--peek` mode reads without advancing the offset
-
----
-
-## 5. Commands
-
-> **Important:** Do NOT create the Telegram CRON automatically. Only act when the user **explicitly requests** it.
-
-### Setup Trigger
-
-When the user says "setup telegram" / "настрой телеграм" / "configure telegram":
-
-1. Check if `TG_BOT_TOKEN` and `TG_ADMIN_IDS` are already set in `.env`
-2. **If not configured** — run the setup wizard:
-   ```bash
-   python3 <SKILL_SCRIPTS_PATH>/tg_setup.py
-   ```
-   This will interactively ask for the bot token and admin IDs, verify them, and save to `.env`.
-3. **If already configured** — inform the user: "Telegram is already configured. Say 'start telegram' to enable."
-
-### Activation Triggers
-
-The agent should create the Telegram Inbox CRON **only** when the user says something like:
-- "start telegram" / "enable telegram"
-- "подключи телеграм" / "запусти телеграм"
-- "I want to chat via Telegram"
-- Any clear request to enable Telegram communication
-
-### Deactivation Triggers
-
-The agent should **stop** the CRON when the user says:
-- "stop telegram" / "disable telegram"
-- "выключи телеграм" / "останови телеграм"
-
-To stop: use `manage_task` tool to kill the CRON task.
-
-### Telegram Inbox CRON
-
-**Schedule:** Read `TG_POLL_INTERVAL` from `.env` to determine the frequency. Build the cron expression as `*/<interval> * * * *`.
-
-| `TG_POLL_INTERVAL` | CRON Expression | Checks per hour |
-|--------------------|-----------------|------------------|
-| `1` | `*/1 * * * *` | 60 (real-time) |
-| `2` | `*/2 * * * *` | 30 |
-| `5` (default) | `*/5 * * * *` | 12 |
-| `10` | `*/10 * * * *` | 6 |
-| `15` | `*/15 * * * *` | 4 |
-| `30` | `*/30 * * * *` | 2 |
-
-> **How to read `TG_POLL_INTERVAL`:** Run `python3 -c "import os; [exec(f'os.environ.setdefault(*l.strip().split(\"=\",1))') for l in open('.env') if '=' in l and not l.startswith('#')]; print(os.environ.get('TG_POLL_INTERVAL','5'))"` — this prints the configured interval or `5` if not set.
-
-**Prompt for `schedule` tool:**
-```
-Check Telegram inbox for new user messages. Execute:
-1. Run: python3 <SKILL_SCRIPTS_PATH>/tg_inbox.py
-2. If messages returned (non-empty JSON array):
-   - Process each message — interpret the request
-   - Use any available MCP tools to fulfill the request
-   - Reply via: python3 <SKILL_SCRIPTS_PATH>/tg_send.py -m "REPLY_TEXT" --level info
-3. If no messages (empty array []): do nothing, end turn.
-Only respond to user messages. Do not start other workflows unless explicitly requested.
-```
-
-> **Important:** Replace `<SKILL_SCRIPTS_PATH>` with the actual path to the scripts directory based on your installation (global plugin or project skill).
+The `.telegram_offset` file in the project root tracks the last processed message:
+- Each message seen **exactly once**
+- No duplicates across runs
+- `--peek` reads without advancing offset
 
 ---
 
@@ -241,35 +221,15 @@ Only respond to user messages. Do not start other workflows unless explicitly re
 
 ---
 
-## 7. Quick Reference
-
-```bash
-# ---- Send text message ----
-python3 <path>/scripts/tg_send.py -m "MESSAGE" [--level info|warning|critical] [--silent]
-
-# ---- Send photo ----
-python3 <path>/scripts/tg_send_photo.py --photo FILE --caption "TEXT" [--level info|warning|critical] [--silent]
-
-# ---- Check inbox ----
-python3 <path>/scripts/tg_inbox.py            # fetch + advance offset
-python3 <path>/scripts/tg_inbox.py --peek      # fetch without advancing
-python3 <path>/scripts/tg_inbox.py --mark-read # skip all pending
-
-# ---- Setup ----
-python3 <path>/scripts/tg_setup.py             # interactive setup wizard
-```
-
----
-
-## 8. Troubleshooting
+## 7. Troubleshooting
 
 | Problem | Solution |
 |---------|----------|
-| `SKIP: Telegram not configured` | Add `TG_BOT_TOKEN` and `TG_ADMIN_IDS` to `.env` in project root |
+| `SKIP: Telegram not configured` | Run `setup telegram` or add `TG_BOT_TOKEN` + `TG_ADMIN_IDS` to `.env` |
 | Messages not received | Check that `TG_ADMIN_IDS` matches your Telegram user ID |
-| Bot doesn't respond | Ensure the CRON is running (`schedule` tool). Check `.telegram_offset` file |
+| Bot doesn't respond | Run `status telegram` to check if CRON is active |
 | Photos fail to send | Verify the file path is absolute and the file exists |
-| `.env` not found | Run scripts from the project root directory, or use `--env-file` flag |
+| `.env` not found | Run scripts from the project root, or use `--env-file` flag |
 
 ---
 
